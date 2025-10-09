@@ -1,0 +1,5 @@
+project_name    = "zero-trust-architecture"
+project_short   = "zeta"
+location        = "westeurope"
+stage           = "dev"
+# subscription_id = "<TODO>"

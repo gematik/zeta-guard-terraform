@@ -1,0 +1,8 @@
+# Terraform files
+plan.out
+*.tfstate*
+.terraform
+
+.jenkins
+.githubignore
+gematik-gcp

@@ -1,0 +1,27 @@
+image: hashicorp/terraform:1.12.2
+
+variables:
+  TF_ROOT: gematik-azure/showcase-stage
+
+cache:
+  key: terraform-${CI_COMMIT_REF_SLUG}
+  paths:
+    - $TF_ROOT/.terraform
+    - $TF_ROOT/.terraform.lock.hcl
+
+stages:
+  - init-validate-plan
+
+terraform:
+  stage: init-validate-plan
+  tags: [aks]
+  script:
+    - cd "$TF_ROOT"
+    - terraform init -backend-config=backend.hcl
+    - terraform validate
+    - terraform plan -var-file=../var-envs/common.tfvars -var="subscription_id=$ARM_SUBSCRIPTION_ID" -out plan.out
+    - terraform show plan.out -no-color > output.txt
+  artifacts:
+    paths:
+      - "$TF_ROOT/output.txt"
+    expire_in: 1h
