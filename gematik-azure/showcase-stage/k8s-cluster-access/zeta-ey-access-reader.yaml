@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zeta-staging
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: reader
+  namespace: zeta-staging
+automountServiceAccountToken: false
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: access-read
+  namespace: zeta-staging
+rules:
+  # Read basic workload and service resources
+  - apiGroups: ["", "apps"]
+    resources:
+      - pods
+      - services
+      - deployments
+    verbs: ["get", "list", "watch"]
+
+  # Read pod logs
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "watch"]
+
+  # Allow port-forward to pods and services
+  - apiGroups: [""]
+    resources: ["pods/portforward", "services/portforward"]
+    verbs: ["create"]
+
+  # Read rollout/status for deployments (helpful for investigating)
+  - apiGroups: ["apps"]
+    resources: ["deployments/status"]
+    verbs: ["get", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: access-read-binding
+  namespace: zeta-staging
+subjects:
+  - kind: ServiceAccount
+    name: reader
+    namespace: zeta-staging
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: access-read
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ey-access-read-all-ns
+rules:
+  - apiGroups: ["", "apps"]
+    resources: ["pods", "services", "deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/portforward", "services/portforward"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/status"]
+    verbs: ["get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ey-access-read-all-ns
+subjects:
+  - kind: ServiceAccount
+    name: reader
+    namespace: zeta-staging
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ey-access-read-all-ns

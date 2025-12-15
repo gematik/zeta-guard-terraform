@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci
+  namespace: ci
+automountServiceAccountToken: false
+
+---
+# Broad, namespaced permissions (all namespaces via ClusterRoleBinding).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ci-helm-write
+rules:
+
+  # Core namespaced resources created by charts
+  - apiGroups: [ "" ]
+    resources:
+      - "configmaps"
+      - "secrets"
+      - "services"
+      - "pods"
+      - "pods/exec"
+      - "serviceaccounts"
+      - "persistentvolumeclaims"
+      - "endpoints"
+      - "events"
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # For terraform-lock file
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "get", "create", "update", "patch" ]
+
+  # Workloads created by charts
+  - apiGroups: [ "apps" ]
+    resources:
+      - "daemonsets"
+      - "deployments"
+      - "replicasets"
+      - "statefulsets"
+      - "deployments/status"
+      - "replicasets/status"
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # Ingress + NetworkPolicy
+  - apiGroups: [ "networking.k8s.io" ]
+    resources: [ "ingresses","networkpolicies" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # Admission jobs (ingress-nginx) and any chart jobs
+  - apiGroups: [ "batch" ]
+    resources: [ "jobs","cronjobs" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # PDBs (PostgreSQL)
+  - apiGroups: [ "policy" ]
+    resources: [ "poddisruptionbudgets" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # Namespaced RBAC authored by charts (ingress-nginx)
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "roles","rolebindings" ]
+    verbs: [ "get","list","watch","create","update","patch","delete","escalate","bind" ]
+
+  # Zalando Postgres operator CR
+  - apiGroups: [ "acid.zalan.do" ]
+    resources: [ "postgresqls" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ci-helm-write-all-ns
+subjects:
+  - kind: ServiceAccount
+    name: ci
+    namespace: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ci-helm-write
+---
+
+# Cluster-scoped objects, charts create/manage, plus namespace lifecycle.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ci-clusterscope-write
+rules:
+
+  # Allow CI to create/delete namespaces
+  - apiGroups: [ "" ]
+    resources: [ "namespaces" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # Cluster-scoped RBAC authored by ingress-nginx
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "clusterroles" ]
+    verbs: [ "get","list","watch","create","update","patch","delete","escalate","bind" ]
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "clusterrolebindings" ]
+    verbs: [ "get","list","watch","create","update","patch","delete","bind" ]
+
+  # Admission webhooks (ingress-nginx)
+  - apiGroups: [ "admissionregistration.k8s.io" ]
+    resources: [ "validatingwebhookconfigurations","mutatingwebhookconfigurations" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # IngressClass (managed by ingress-nginx)
+  - apiGroups: [ "networking.k8s.io" ]
+    resources: [ "ingressclasses" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # ClusterIssuer (managed by the umbrella)
+  - apiGroups: [ "cert-manager.io" ]
+    resources: [ "clusterissuers" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ci-clusterscope-write-binding
+subjects:
+  - kind: ServiceAccount
+    name: ci
+    namespace: ci
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ci-clusterscope-write

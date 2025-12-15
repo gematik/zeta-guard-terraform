@@ -1,0 +1,335 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zeta-achelos
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: zeta-achelos
+imagePullSecrets:
+  - name: gitlab-registry-credentials-zeta-group
+automountServiceAccountToken: false  # Pod-Token nicht automatisch mounten
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer-write
+  namespace: zeta-achelos
+rules:
+  - apiGroups: [ "", "apps", "networking.k8s.io" ]
+    resources:
+      - pods
+      - services
+      - endpoints
+      - deployments
+      - statefulsets
+      - replicasets
+      - ingresses
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - persistentvolumeclaims/status
+      - networkpolicies
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # EndpointSlices (modern endpoint API)
+  - apiGroups: [ "discovery.k8s.io" ]
+    resources: [ "endpointslices" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  - apiGroups: [ "policy" ]
+    resources: [ "poddisruptionbudgets" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # Zalando Postgres operator CRs
+  - apiGroups: [ "acid.zalan.do" ]
+    resources: [ "postgresqls" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # Namespaced RBAC authored by charts (e.g., ingress-nginx)
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "roles", "rolebindings" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete", "escalate", "bind" ]
+
+  # Admission jobs or other chart jobs/cronjobs
+  - apiGroups: [ "batch" ]
+    resources: [ "jobs", "cronjobs" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  - apiGroups: [ "" ]
+    resources: [ "serviceaccounts" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "storageclasses" ]
+    verbs: [ "get","list","watch" ]
+
+  # allow reading pod logs
+  - apiGroups: [ "" ]
+    resources: [ "pods/log" ]
+    verbs: [ "get","watch" ]
+
+  # allow exec in logs
+  - apiGroups: [ "" ]
+    resources: [ "pods/exec"]
+    verbs: [ "create", "get" ]
+
+  # allow port-forward to pods and services
+  - apiGroups: [ "" ]
+    resources: [ "pods/portforward", "services/portforward" ]
+    verbs: [ "create" ]
+
+  # allow reading rollout/status for deployments/rs
+  - apiGroups: [ "apps" ]
+    resources: [ "deployments/status", "replicasets/status", "statefulsets/status" ]
+    verbs: [ "get", "watch" ]
+
+  # allow seeing events (for troubleshooting)
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "get", "list","watch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-binding
+  namespace: zeta-achelos
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: zeta-achelos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer-write
+
+---
+# Optional: Ressourcen- und Limitvorgaben
+#apiVersion: v1
+#kind: ResourceQuota
+#metadata:
+#  name: rq-zeta-achelos
+#  namespace: zeta-achelos
+#spec:
+#  hard:
+#    pods: "20"
+#    requests.cpu: "4"
+#    requests.memory: "16Gi"
+#    limits.cpu: "10"
+#    limits.memory: "32Gi"
+
+---
+#apiVersion: v1
+#kind: LimitRange
+#metadata:
+#  name: lr-zeta-achelos
+#  namespace: zeta-achelos
+#spec:
+#  limits:
+#    - type: Container
+#      default:
+#        cpu: "1"
+#        memory: "1Gi"
+#      defaultRequest:
+#        cpu: "100m"
+#        memory: "256Mi"
+
+---
+# Cluster-scoped RBAC for Helm to manage cluster resources (e.g., ingress-nginx)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zeta-achelos-deployer-clusterscope
+rules:
+  # For terraform-lock file
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "get", "create", "update", "patch" ]
+    
+  # Cluster-scoped RBAC authored by some charts (e.g., ingress-nginx)
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "clusterroles", "clusterrolebindings" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete", "escalate", "bind" ]
+
+  # Admission webhooks used by ingress-nginx and others
+  - apiGroups: [ "admissionregistration.k8s.io" ]
+    resources: [ "validatingwebhookconfigurations", "mutatingwebhookconfigurations" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # IngressClass managed by ingress controllers
+  - apiGroups: [ "networking.k8s.io" ]
+    resources: [ "ingressclasses" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # CRDs that may be installed by some charts
+  - apiGroups: [ "apiextensions.k8s.io" ]
+    resources: [ "customresourcedefinitions" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # Namespaces (optional; handy with --create-namespace or for cleanup)
+  - apiGroups: [ "" ]
+    resources: [ "namespaces" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # Cert-Manager cluster issuer (if used by umbrella chart)
+  - apiGroups: [ "cert-manager.io" ]
+    resources: [ "clusterissuers" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # allow port-forward to pods and services in all namespaces
+  - apiGroups: [ "" ]
+    resources: [ "pods/portforward", "services/portforward" ]
+    verbs: [ "create" ]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zeta-achelos-deployer-clusterscope
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: zeta-achelos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: zeta-achelos-deployer-clusterscope
+
+---
+# Grant the same ServiceAccount (zeta-achelos/deployer) write access in zeta-achelos-dev
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployer-write
+  namespace: zeta-achelos-dev
+rules:
+  - apiGroups: [ "", "apps", "networking.k8s.io" ]
+    resources:
+      - pods
+      - services
+      - endpoints
+      - deployments
+      - statefulsets
+      - replicasets
+      - ingresses
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - persistentvolumeclaims/status
+      - networkpolicies
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # EndpointSlices (modern endpoint API)
+  - apiGroups: [ "discovery.k8s.io" ]
+    resources: [ "endpointslices" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  - apiGroups: [ "policy" ]
+    resources: [ "poddisruptionbudgets" ]
+    verbs: [ "get","list","watch","create","update","patch","delete" ]
+
+  # Zalando Postgres operator CRs
+  - apiGroups: [ "acid.zalan.do" ]
+    resources: [ "postgresqls" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  # Namespaced RBAC authored by charts (e.g., ingress-nginx)
+  - apiGroups: [ "rbac.authorization.k8s.io" ]
+    resources: [ "roles", "rolebindings" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete", "escalate", "bind" ]
+
+  # Admission jobs or other chart jobs/cronjobs
+  - apiGroups: [ "batch" ]
+    resources: [ "jobs", "cronjobs" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  - apiGroups: [ "" ]
+    resources: [ "serviceaccounts" ]
+    verbs: [ "get", "list", "watch", "create", "update", "patch", "delete" ]
+
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: [ "storageclasses" ]
+    verbs: [ "get","list","watch" ]
+
+  # allow reading pod logs
+  - apiGroups: [ "" ]
+    resources: [ "pods/log" ]
+    verbs: [ "get","watch" ]
+
+  # allow exec in pods
+  - apiGroups: [ "" ]
+    resources: [ "pods/exec"]
+    verbs: [ "create", "get" ]
+
+  # allow port-forward to pods and services
+  - apiGroups: [ "" ]
+    resources: [ "pods/portforward", "services/portforward" ]
+    verbs: [ "create" ]
+
+  # allow reading rollout/status for deployments/rs
+  - apiGroups: [ "apps" ]
+    resources: [ "deployments/status", "replicasets/status", "statefulsets/status" ]
+    verbs: [ "get", "watch" ]
+
+  # allow seeing events (for troubleshooting)
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "get", "list","watch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-binding
+  namespace: zeta-achelos-dev
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: zeta-achelos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployer-write
+
+---
+# Grant reader rights (view) in all namespaces to zeta-achelos/deployer
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zeta-achelos-deployer-view-all-ns
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: zeta-achelos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+
+---
+# Cluster-wide pod logs for zeta-achelos/deployer
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zeta-achelos-deployer-logs-all-ns
+rules:
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zeta-achelos-deployer-logs-all-ns
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: zeta-achelos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: zeta-achelos-deployer-logs-all-ns
