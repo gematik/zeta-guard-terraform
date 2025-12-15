@@ -4,8 +4,6 @@
 
 Terraform descriptors to set up ZETA Guard compatible environments.
 
-Only the Azure variety is supported at the moment.
-
 ## License
 
 (C) akquinet tech@Spree GmbH, 2025, licensed for gematik GmbH

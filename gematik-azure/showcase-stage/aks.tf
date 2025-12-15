@@ -47,11 +47,11 @@ resource "azurerm_kubernetes_cluster" "default_cluster" {
 
   default_node_pool {
     name    = "default"
-    vm_size = "Standard_D4s_v4" # other values? https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/overview
+    vm_size = "Standard_D8s_v6" # other values? https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/overview
 
     auto_scaling_enabled = true
     min_count            = 3
-    max_count            = 5
+    max_count            = 6
 
     vnet_subnet_id = azurerm_subnet.aks_nodes.id
 
@@ -92,8 +92,14 @@ resource "azurerm_kubernetes_cluster" "default_cluster" {
   tags = local.base_tags
 }
 
+/*
 resource "kubernetes_namespace" "demo_ui" {
   metadata { name = "demo-ui" }
+}
+
+moved {
+  from = kubernetes_namespace.demo_ui
+  to   = kubernetes_namespace.demo_ui[0]
 }
 
 resource "kubernetes_deployment" "hello" {
@@ -137,3 +143,4 @@ resource "kubernetes_service" "hello" {
     }
   }
 }
+*/

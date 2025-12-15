@@ -6,3 +6,6 @@ plan.out
 .jenkins
 .githubignore
 gematik-gcp
+gematik-azure/ci
+gematik-azure/showcase-stage/k8s-cluster-access.jenkins
+.githubignore

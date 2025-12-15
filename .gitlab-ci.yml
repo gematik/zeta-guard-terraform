@@ -17,6 +17,15 @@ terraform:
   tags: [aks]
   script:
     - cd "$TF_ROOT"
+    - |
+      if [ -z "$KUBECONFIG_B64" ]; then
+        echo "KUBECONFIG_B64 is required but not set." >&2
+        exit 1
+      fi
+      echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
+      export KUBECONFIG=$PWD/kubeconfig
+      # Also pass kubeconfig path to Terraform variable so providers use it explicitly
+      export TF_VAR_kubeconfig_path="$KUBECONFIG"
     - terraform init -backend-config=backend.hcl
     - terraform validate
     - terraform plan -var-file=../var-envs/common.tfvars -var="subscription_id=$ARM_SUBSCRIPTION_ID" -out plan.out

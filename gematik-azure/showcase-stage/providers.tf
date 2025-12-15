@@ -25,13 +25,11 @@ provider "azurerm" {
 }
 
 provider "kubernetes" {
-  config_path    = "~/.kube/config"
-  config_context = null
+  config_path = pathexpand(var.kubeconfig_path)
 }
 
 provider "helm" {
   kubernetes {
-    config_path    = "~/.kube/config"
-    config_context = null
+    config_path = pathexpand(var.kubeconfig_path)
   }
 }
